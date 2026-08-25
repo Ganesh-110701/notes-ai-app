@@ -1,0 +1,179 @@
+openapi: 3.0.3
+info:
+  title: AI Notes API
+  description: >
+    Notes management API with AI-powered semantic search and AI-generated
+    summaries. All endpoints are prefixed with /api and return JSON.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000/api
+tags:
+  - name: Notes
+paths:
+  /notes:
+    get:
+      tags: [Notes]
+      summary: List notes (paginated)
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          description: Notes per page (max 100)
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: Paginated list of notes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoteCollection' }
+    post:
+      tags: [Notes]
+      summary: Create a note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoteInput' }
+      responses:
+        '201':
+          description: Note created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoteResponse' }
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+
+  /notes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Notes]
+      summary: Get a single note
+      responses:
+        '200':
+          description: The note
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoteResponse' }
+        '404': { description: Note not found }
+    put:
+      tags: [Notes]
+      summary: Update a note (full or partial)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoteInput' }
+      responses:
+        '200':
+          description: Updated note
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoteResponse' }
+        '422':
+          description: Validation error
+        '404': { description: Note not found }
+    delete:
+      tags: [Notes]
+      summary: Delete a note
+      responses:
+        '204': { description: Deleted, no content }
+        '404': { description: Note not found }
+
+  /notes/{id}/summary:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Notes]
+      summary: Generate (or return the cached) AI summary of a note
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  summary: { type: string }
+        '404': { description: Note not found }
+
+  /notes/search:
+    get:
+      tags: [Notes]
+      summary: AI-powered semantic search
+      description: >
+        Ranks notes by embedding (cosine similarity) to the query, not by
+        exact keyword matches - e.g. a query like "money savings" can
+        surface a note titled "Monthly budget planning".
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: Ranked notes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NoteCollection' }
+        '422': { description: Validation error (missing/short q) }
+        '429': { description: Too many requests (rate limited) }
+
+components:
+  schemas:
+    NoteInput:
+      type: object
+      required: [title, content]
+      properties:
+        title: { type: string, maxLength: 255 }
+        content: { type: string, maxLength: 20000 }
+    Note:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        content: { type: string }
+        summary: { type: string, nullable: true }
+        has_summary: { type: boolean }
+        relevance_score:
+          type: number
+          nullable: true
+          description: Only present on /notes/search results.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NoteResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Note' }
+    NoteCollection:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Note' }
+        links: { type: object }
+        meta: { type: object }
+    ValidationError:
+      type: object
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
